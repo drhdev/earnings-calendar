@@ -81,7 +81,7 @@ The script requires a `.env` file for setting API keys and database credentials.
 ALPHAVANTAGE_API_KEY=your_alphavantage_api_key_here
 
 # Database credentials
-DB_NAME=earningscalendar
+DB_NAME=markets_db
 DB_USER=your_db_user
 DB_PASSWORD=your_db_password
 DB_HOST=localhost
