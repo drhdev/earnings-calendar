@@ -1,5 +1,5 @@
-# Name: earningscalendar.py
-# Version: 0.1
+# Name: earnings-calendar.py
+# Version: 0.1.7
 # Author: drhdev
 # Description: Downloads earnings calendar data from Alpha Vantage API daily, stores data in MySQL database, updates new and changed data entries.
 
@@ -9,7 +9,7 @@ import csv
 import logging
 import requests
 import sqlalchemy
-from sqlalchemy import create_engine, Table, Column, String, Float, DateTime, MetaData
+from sqlalchemy import create_engine, Table, Column, String, Float, DateTime, MetaData, select
 from sqlalchemy.dialects.mysql import insert
 from sqlalchemy.exc import SQLAlchemyError
 from dotenv import load_dotenv
@@ -20,8 +20,8 @@ import shutil
 base_dir = os.path.dirname(os.path.abspath(__file__))
 
 # Set up logging
-log_filename = os.path.join(base_dir, f"ally_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log")
-logger = logging.getLogger('earningscalendar.py')
+log_filename = os.path.join(base_dir, f"earnings-calendar_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log")
+logger = logging.getLogger('earnings-calendar.py')
 logger.setLevel(logging.DEBUG)
 
 # Create a new log file for each run
@@ -31,7 +31,7 @@ handler.setFormatter(formatter)
 logger.addHandler(handler)
 
 # Limit the number of log files to 10 by deleting the oldest
-log_files = sorted([f for f in os.listdir(base_dir) if f.startswith('ally_') and f.endswith('.log')])
+log_files = sorted([f for f in os.listdir(base_dir) if f.startswith('earnings-calendar_') and f.endswith('.log')])
 if len(log_files) > 10:
     for old_log in log_files[:-10]:
         os.remove(os.path.join(base_dir, old_log))
@@ -46,17 +46,19 @@ if '-v' in sys.argv:
 # Load environment variables
 load_dotenv(os.path.join(base_dir, '.env'))
 api_key = os.getenv('ALPHAVANTAGE_API_KEY')
-db_name = os.getenv('DB_NAME', 'earningscalendar')
+db_name = os.getenv('DB_NAME')
 db_user = os.getenv('DB_USER')
 db_password = os.getenv('DB_PASSWORD')
-db_host = os.getenv('DB_HOST', 'localhost')
-db_charset = os.getenv('DB_CHARSET', 'utf8')
-table_name = os.getenv('TABLE_NAME', 'earningscalendar')
-columns_prefix = os.getenv('COLUMNS_PREFIX', 'ec_')
+db_host = os.getenv('DB_HOST')
+db_charset = os.getenv('DB_CHARSET')
+table_name = os.getenv('TABLE_NAME')
+columns_prefix = os.getenv('COLUMNS_PREFIX')
 
-# Validate API key
-if not api_key:
-    logger.error("Alpha Vantage API key not found in .env file.")
+# Validate environment variables
+required_env_vars = ['ALPHAVANTAGE_API_KEY', 'DB_NAME', 'DB_USER', 'DB_PASSWORD', 'DB_HOST', 'DB_CHARSET', 'TABLE_NAME', 'COLUMNS_PREFIX']
+missing_vars = [var for var in required_env_vars if not os.getenv(var)]
+if missing_vars:
+    logger.error(f"Missing environment variables: {', '.join(missing_vars)}. Please check the .env file.")
     sys.exit(1)
 
 # Create temporary directory
@@ -85,6 +87,7 @@ try:
     engine = create_engine(db_url)
     metadata.create_all(engine)
     connection = engine.connect()
+    transaction = connection.begin()
 except SQLAlchemyError as e:
     logger.error(f"Database connection failed: {e}")
     sys.exit(1)
@@ -108,14 +111,23 @@ try:
     with open(csv_path, 'r') as f:
         csv_reader = csv.DictReader(f)
         for row in csv_reader:
-            # Convert fields
-            symbol = row['symbol']
-            name = row['name']
+            # Convert fields with safe handling for empty values
+            symbol = row['symbol'] if row['symbol'] else None
+            name = row['name'] if row['name'] else None
             report_date = datetime.strptime(row['reportDate'], '%Y-%m-%d') if row['reportDate'] else None
             fiscal_date_ending = datetime.strptime(row['fiscalDateEnding'], '%Y-%m-%d') if row['fiscalDateEnding'] else None
             estimate = float(row['estimate']) if row['estimate'] else None
-            currency = row['currency']
+            currency = row['currency'] if row['currency'] else None
             last_polled = datetime.now()
+
+            # Log the data being processed
+            logger.debug(f"Processing data: symbol={symbol}, name={name}, report_date={report_date}, "
+                         f"fiscal_date_ending={fiscal_date_ending}, estimate={estimate}, currency={currency}")
+
+            # Ensure at least the symbol is not None, otherwise skip
+            if not symbol:
+                logger.warning(f"Skipping row with missing symbol: {row}")
+                continue
 
             # Determine which columns have changed
             changed_columns = []
@@ -157,9 +169,30 @@ try:
 
             # Execute statement
             connection.execute(stmt)
+            logger.debug(f"Inserted/Updated data for symbol={symbol}")
+
+            # Commit after each insert/update
+            transaction.commit()
+            transaction = connection.begin()
+
+            # Verify data was written correctly by querying the database
+            query = select(
+                earnings_calendar.c[f'{columns_prefix}symbol'],
+                earnings_calendar.c[f'{columns_prefix}name'],
+                earnings_calendar.c[f'{columns_prefix}report_date'],
+                earnings_calendar.c[f'{columns_prefix}fiscal_date_ending'],
+                earnings_calendar.c[f'{columns_prefix}estimate'],
+                earnings_calendar.c[f'{columns_prefix}currency']
+            ).where(earnings_calendar.c[f'{columns_prefix}symbol'] == symbol)
+            result = connection.execute(query).fetchone()
+            if result:
+                logger.debug(f"Verified data in database for symbol={symbol}: {result}")
+            else:
+                logger.error(f"Failed to verify data in database for symbol={symbol}")
     logger.info("Database updated successfully.")
 except (SQLAlchemyError, csv.Error) as e:
     logger.error(f"Failed to process CSV and update database: {e}")
+    transaction.rollback()
     sys.exit(1)
 finally:
     # Clean up temp directory
@@ -168,6 +201,8 @@ finally:
     if os.path.exists(temp_dir) and len(os.listdir(temp_dir)) == 0:
         os.rmdir(temp_dir)
 
-# Close the database connection
-connection.close()
-logger.info("Script completed successfully.")
+    # Close the database connection
+    transaction.commit()
+    connection.close()
+    logger.info("Script completed successfully.")
+
