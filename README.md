@@ -1,67 +1,47 @@
 # earnings-calendar
-A Python script that downloads earnings calendar data from Alpha Vantage API daily, stores data in MySQL database, updates new and changed data entries.
+A collection of Python script that download a) earnings calendar data from Alpha Vantage API and b) companies' market cap data from companiesmarketcap.com as CSV, stores data in MySQL database, updates new and changed data entries.
 
 ### Overview
-The script is designed to automate the downloading of an earnings calendar CSV file from the Alpha Vantage API and store the data in a MySQL database. It also tracks changes in the data and logs operations for easier debugging and monitoring.
+The script earnings-calendar.py is designed to automate the downloading of an earnings calendar CSV file from the Alpha Vantage API and store the data in a MySQL database. The script companiesmarketcap.py downloads a CSV file with the current marketcap of >3,000 US traded companies and stores them in a MySQL database. Both log operations for easier debugging and monitoring.
 
 ### Step-by-Step Workflow
 
 1. **Environment Setup**
     - **Base Directory and Logging**: 
-      - The script first sets up the base directory (`base_dir`) and a logging system that records the script’s activities. 
-      - A log file is created in the format `ally_YYYYMMDD_HHMMSS.log` in the script directory. 
-      - The number of log files is limited to 10, with the oldest files being deleted to prevent clutter.
+      - The scripts first set up the base directory (`base_dir`) and a logging system that records the script’s activities. 
+      - Log files are created in the format `name_YYYYMMDD_HHMMSS.log` in the script directory. 
+      - The number of log files is limited to 10 each, with the oldest files being deleted to prevent clutter.
 
     - **Verbose Option**:
-      - If the script is run with the `-v` flag, a console handler is added to display log entries in real-time on the console.
+      - If the scripts are run with the `-v` flag, a console handler is added to display log entries in real-time on the console.
 
     - **Environment Variables**:
-      - The script uses a `.env` file to manage sensitive information and configuration settings, such as:
+      - The scripts use a shared `.env` file to manage sensitive information and configuration settings, such as:
         - Alpha Vantage API key.
         - Database credentials and connection details (name, user, password, host, charset).
-        - Table settings like table name and column prefix.
+        - Table settings like table name and column prefix are hardcoded in each script.
 
 2. **Validating API Key**
-    - The script checks if the API key is found in the `.env` file. If not, an error is logged, and the script exits.
+    - The earnings-calendar.py script checks if the API key is found in the `.env` file. If not, an error is logged, and the script exits.The companiesmarketcap.py script does not need an API key.
 
 3. **Temporary Directory**
-    - A temporary directory named `temp` is created to store the CSV file downloaded from the API. If the directory doesn’t exist, it is created.
+    - A temporary directory named `temp_earnings-calendar` is created for the earnings-calendar.py script and `temp_companiesmarketcap` to store the CSV files downloaded. If the directories don’t exist, they are created.
 
 4. **Database Structure Definition**
     - **SQLAlchemy** is used to define the structure of the MySQL database table.
     - The database credentials are read from the `.env` file, and an SQLAlchemy connection (`engine`) is established.
-    - The table name and column prefix are configurable via environment variables, ensuring flexibility in managing multiple tables.
-    - The table includes columns for `symbol`, `name`, `report_date`, `fiscal_date_ending`, `estimate`, `currency`, `last_polled`, `last_updated`, and `last_changed`. 
-    - A connection to the MySQL database is established using SQLAlchemy, and if the database connection fails, the script logs the error and exits.
+    - The table name and column prefix are configurable ine ach script, ensuring flexibility in managing multiple tables.
+    - A connection to the MySQL database is established using SQLAlchemy, and if the database connection fails, the scripts log the error and exit.
 
-5. **Download CSV from Alpha Vantage API**
-    - The CSV file is downloaded from Alpha Vantage using the configured API key.
-    - The response is saved as `earnings_calendar.csv` in the temporary directory.
-    - If the download fails, an error is logged, and the script exits.
+5. **Clean-Up**
+    - After processing, the scripts remove the downloaded CSV files.
+    - If the temporary directories are empty after cleaning, they are also removed.
 
-6. **Process CSV and Update Database**
-    - The script reads the CSV file and iterates through each row.
-    - Data is extracted from the CSV and converted as needed (e.g., converting date strings to `datetime` objects).
-    - **Determine Changed Columns**: The script determines which fields have been updated by comparing data for each row with existing data in the database. 
-    - A list (`changed_columns`) is generated to store the names of the columns that have changed, and this is recorded in the `last_changed` column.
-
-    - **Insert or Update Database**:
-      - The script constructs an SQLAlchemy insert statement using `insert()` that, in the event of a duplicate key (`symbol`), performs an update.
-      - Updated fields include the standard data fields (`name`, `report_date`, etc.), as well as timestamps for `last_polled` and `last_updated`.
-      - The `last_changed` field records which specific columns were updated in this run.
-
-    - **Error Handling**:
-      - Errors during the CSV processing or database updates are logged, and the script exits gracefully.
-
-7. **Clean-Up**
-    - After processing, the script removes the downloaded CSV file.
-    - If the temporary directory is empty after cleaning, it is also removed.
-
-8. **Closing Connection and Final Log**
-    - The MySQL database connection is closed, and the script logs a message indicating that it completed successfully.
+6. **Closing Connection and Final Log**
+    - The MySQL database connection is closed, and the scripts log a message indicating that they completed successfully.
 
 ### Logging
-The script includes comprehensive logging to help track each stage of execution, including:
+The scripts include comprehensive logging to help track each stage of execution, including:
 
 - **File Logging**: All actions and errors are logged to a timestamped log file in the working directory.
 - **Console Logging**: If run in verbose mode (`-v`), logs are also displayed in real time on the console.
@@ -74,7 +54,7 @@ The script includes comprehensive logging to help track each stage of execution,
 - **Timestamps**: `last_polled` records when the data was last fetched from the API, while `last_updated` shows when any of the data in that row was last modified.
 
 ### .env Configuration
-The script requires a `.env` file for setting API keys and database credentials. An example `.env` file looks like:
+The scripts require a `.env` file for setting API keys and database credentials. An example `.env` file looks like:
 
 ```env
 # Alpha Vantage API Key
@@ -87,14 +67,11 @@ DB_PASSWORD=your_db_password
 DB_HOST=localhost
 DB_CHARSET=utf8
 
-# Table configuration
-TABLE_NAME=earningscalendar
-COLUMNS_PREFIX=ec_
 ```
 
 The `.env` file helps keep sensitive credentials out of the source code, and allows easy configuration without editing the script directly.
 
-To install and set up the script from your GitHub repository into `/home/user/python/earnings-calendar`, create a virtual environment, run the script manually, and set it up with a cronjob to run every night at 2 AM, follow these steps:
+To install and set up the scripts from your GitHub repository into `/home/user/python/earnings-calendar`, create a virtual environment, run the scripts manually, and set it up with a cronjob to run every night at 2 AM, follow these steps:
 
 ### 1. Clone the Repository
 First, you need to clone the repository to the desired directory.
@@ -150,25 +127,25 @@ DB_USER=your_database_user
 DB_PASSWORD=your_database_password
 DB_HOST=localhost
 DB_CHARSET=utf8
-TABLE_NAME=earningscalendar
-COLUMNS_PREFIX=ec_
 ```
 
-### 6. Run the Script Manually
-You can now run the script manually to verify that it works as expected:
+### 6. Run the Scripts Manually
+You can now run the scripts manually to verify that it works as expected:
 
 ```bash
-python earningscalendar.py
+python earnings-calendar.py
+python companiesmarketcap.py
 ```
 
-If you want to run it in verbose mode, use:
+If you want to run them in verbose mode, use:
 
 ```bash
-python earningscalendar.py -v
+python earnings-calendar.py -v
+python companiesmarketcap.py -v
 ```
 
 ### 7. Schedule a Cronjob to Run Every Night at 2 AM
-To run the script every night at 2 AM, add a cronjob for the user.
+To run the scripts every night at 2 AM and 2:15 AM, add cronjobs for the user.
 
 First, edit the user's cron jobs:
 
@@ -179,21 +156,22 @@ crontab -e
 Add the following line to schedule the script:
 
 ```cron
-0 2 * * * /home/user/python/earnings-calendar/venv/bin/python /home/user/python/earnings-calendar/earningscalendar.py >> /home/user/python/earnings-calendar/cronjob.log 2>&1
+0 2 * * * /home/user/python/earnings-calendar/venv/bin/python /home/user/python/earnings-calendar/earnings-calendar.py >> /home/user/python/earnings-calendar/earnings-calendar-cronjob.log 2>&1
+15 2 * * * /home/user/python/earnings-calendar/venv/bin/python /home/user/python/earnings-calendar/companiesmarketcap.py >> /home/user/python/earnings-calendar/companiesmarketcap-cronjob.log 2>&1
 ```
 
-This cronjob does the following:
+The firstcronjob does the following:
 - **`0 2 * * *`**: Runs the job every day at 2:00 AM.
 - **`/home/user/python/earnings-calendar/venv/bin/python`**: Uses the Python interpreter from the virtual environment.
-- **`/home/user/python/earnings-calendar/earningscalendar.py`**: Runs the script.
-- **`>> /home/user/python/earnings-calendar/cronjob.log 2>&1`**: Redirects output and errors to `cronjob.log` for later review.
+- **`/home/user/python/earnings-calendar/earnings-calendar.py`**: Runs the script.
+- **`>> /home/user/python/earnings-calendar/earnings-calendar-cronjob.log 2>&1`**: Redirects output and errors to `earnings-calendar-cronjob.log` for later review.
 
 ### Summary of Steps
 1. Clone the GitHub repository.
 2. Create and activate a virtual environment.
 3. Install the required dependencies using `requirements.txt`.
 4. Configure the `.env` file with API key and database details.
-5. Run the script manually to test it.
-6. Set up a cronjob to run the script every night at 2 AM.
+5. Run the script(s) manually to test it/them.
+6. Set up a cronjob to run the scripts every night at 2 AM/2:15 AM.
 
-This approach ensures that the script runs in an isolated environment, making it easy to manage dependencies and debug any issues that arise. The cronjob will ensure that the script runs regularly, keeping the data up to date.
+This approach ensures that the scripts run in an isolated environment, making it easy to manage dependencies and debug any issues that arise. The cronjobs will ensure that the scripts run regularly, keeping the data up to date.
