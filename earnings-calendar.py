@@ -1,5 +1,5 @@
 # Name: earnings-calendar.py
-# Version: 0.1.7
+# Version: 0.1.8
 # Author: drhdev
 # Description: Downloads earnings calendar data from Alpha Vantage API daily, stores data in MySQL database, updates new and changed data entries.
 
@@ -65,6 +65,10 @@ if missing_vars:
 temp_dir = os.path.join(base_dir, 'temp')
 if not os.path.exists(temp_dir):
     os.makedirs(temp_dir)
+
+# Hardcoded table name and column prefix
+table_name = 'earningscalendar'
+columns_prefix = 'ec_'
 
 # Define database URL and structure
 try:
@@ -205,4 +209,3 @@ finally:
     transaction.commit()
     connection.close()
     logger.info("Script completed successfully.")
-
